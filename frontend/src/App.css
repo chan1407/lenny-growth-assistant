@@ -1,0 +1,341 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f7f7f5;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  padding: 24px 40px;
+  background: white;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.header p {
+  margin: 6px 0 0;
+  color: #666;
+}
+
+.model {
+  padding: 8px 14px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  font-size: 14px;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat {
+  flex: 1;
+  width: 100%;
+  max-width: 850px;
+  margin: 0 auto;
+  padding: 40px 20px 140px;
+}
+
+.workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
+  gap: 24px;
+  width: min(1400px, 100%);
+  margin: 0 auto;
+}
+
+.workspace .chat {
+  max-width: 850px;
+  width: 100%;
+}
+
+.welcome {
+  text-align: center;
+  margin-top: 120px;
+  color: #555;
+}
+
+.welcome h2 {
+  color: #222;
+}
+
+.message {
+  margin-bottom: 28px;
+}
+
+.role {
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.content {
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  line-height: 1.6;
+}
+
+.content p {
+  margin: 0 0 12px;
+}
+
+.content h2,
+.content h3 {
+  margin: 0 0 12px;
+  line-height: 1.25;
+}
+
+.content li {
+  margin: 4px 0 4px 20px;
+}
+
+.markdown-spacer {
+  height: 4px;
+}
+
+.skill-label {
+  margin-top: 16px;
+  color: #666;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.message.user .content {
+  background: #222;
+  color: white;
+}
+
+.input-area {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20px;
+  background: white;
+  border-top: 1px solid #ddd;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.input-area textarea {
+  width: min(700px, 80%);
+  min-height: 50px;
+  max-height: 150px;
+  padding: 14px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.input-area button {
+  padding: 0 24px;
+  border: none;
+  border-radius: 10px;
+  background: #222;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.input-area button:hover {
+  opacity: 0.85;
+}
+
+.input-area button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.skill-button {
+  background: #8f3f2d !important;
+}
+
+.artifact-viewer {
+  align-self: start;
+  margin: 32px 20px 140px 0;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  min-height: 320px;
+}
+
+.artifact-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+.artifact-header h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+}
+
+.eyebrow,
+.artifact-format {
+  color: #8f3f2d;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.artifact-format {
+  color: #666;
+  border: 1px solid #ddd;
+  padding: 5px 7px;
+  border-radius: 6px;
+}
+
+.artifact-label {
+  display: block;
+  color: #444;
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.artifact-prompt {
+  width: 100%;
+  min-height: 76px;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  resize: vertical;
+  font: inherit;
+}
+
+.artifact-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.artifact-controls select,
+.artifact-controls button {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  background: white;
+  font: inherit;
+}
+
+.artifact-controls select {
+  flex: 1;
+}
+
+.artifact-controls button {
+  background: #222;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.artifact-controls button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.artifact-empty,
+.artifact-error {
+  margin-top: 18px;
+  padding: 14px;
+  color: #666;
+  background: #f7f7f5;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.artifact-error {
+  color: #8f2d25;
+  background: #fff1ef;
+}
+
+.artifact-result {
+  margin-top: 20px;
+}
+
+.artifact-result h3 {
+  margin: 0 0 12px;
+  font-size: 17px;
+}
+
+.artifact-markdown {
+  max-height: 560px;
+  overflow: auto;
+  border-top: 1px solid #eee;
+  padding-top: 12px;
+  font-size: 14px;
+}
+
+.artifact-frame {
+  display: block;
+  width: 100%;
+  height: 500px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+}
+
+.artifact-source {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.artifact-source summary {
+  cursor: pointer;
+  color: #666;
+}
+
+.artifact-source pre {
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px;
+  background: #f7f7f5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.artifact-sources {
+  margin-top: 10px;
+  color: #666;
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    display: block;
+  }
+
+  .artifact-viewer {
+    margin: 0 20px 140px;
+  }
+}
