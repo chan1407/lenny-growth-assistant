@@ -6,10 +6,11 @@ from uuid import uuid4
 import psycopg
 from psycopg.rows import dict_row
 
-from settings import settings
+from .settings import settings
 
 
 logger = logging.getLogger("lenny_growth_assistant.database")
+_SCHEMA_READY = False
 
 
 class DatabaseUnavailableError(RuntimeError):
@@ -36,7 +37,12 @@ def get_connection():
 
 def ensure_schema():
     """Create the required session and message tables if they are missing."""
-    with get_connection() as conn:
+    global _SCHEMA_READY
+    if _SCHEMA_READY:
+        return
+
+    conn = get_connection()
+    try:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -86,6 +92,12 @@ def ensure_schema():
                 "CREATE INDEX IF NOT EXISTS idx_artifacts_session_created ON artifacts (session_id, created_at DESC)"
             )
         conn.commit()
+        _SCHEMA_READY = True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def create_session(user_metadata=None):
@@ -94,7 +106,8 @@ def create_session(user_metadata=None):
     session_id = str(uuid4())
     metadata = user_metadata or {}
 
-    with get_connection() as conn:
+    conn = get_connection()
+    try:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -106,6 +119,11 @@ def create_session(user_metadata=None):
             )
             row = cur.fetchone()
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
     return {
         "session_id": str(row["id"]),
@@ -132,7 +150,8 @@ def get_session(session_id: str):
     """Fetch a session and all related messages in insertion order."""
     ensure_schema()
 
-    with get_connection() as conn:
+    conn = get_connection()
+    try:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -157,13 +176,18 @@ def get_session(session_id: str):
             )
             messages = [_serialize_message_row(row) for row in cur.fetchall()]
 
-    return {
-        "session_id": str(session_row["id"]),
-        "user_metadata": session_row["user_metadata"] or {},
-        "created_at": session_row["created_at"],
-        "updated_at": session_row["updated_at"],
-        "messages": messages,
-    }
+        return {
+            "session_id": str(session_row["id"]),
+            "user_metadata": session_row["user_metadata"] or {},
+            "created_at": session_row["created_at"],
+            "updated_at": session_row["updated_at"],
+            "messages": messages,
+        }
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def save_message(session_id: str, role: str, content: str, source_metadata=None):
@@ -172,13 +196,14 @@ def save_message(session_id: str, role: str, content: str, source_metadata=None)
     message_id = str(uuid4())
     payload = json.dumps(source_metadata) if source_metadata is not None else None
 
-    with get_connection() as conn:
+    conn = get_connection()
+    try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT COALESCE(MAX(message_order), 0) + 1 FROM messages WHERE session_id = %s",
+                "SELECT COALESCE(MAX(message_order), 0) + 1 AS next_order FROM messages WHERE session_id = %s",
                 (session_id,),
             )
-            next_order = cur.fetchone()[0]
+            next_order = cur.fetchone()["next_order"]
             cur.execute(
                 """
                 INSERT INTO messages (id, session_id, role, content, source_metadata, created_at, message_order)
@@ -193,6 +218,11 @@ def save_message(session_id: str, role: str, content: str, source_metadata=None)
                 (session_id,),
             )
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
     return _serialize_message_row(inserted_row)
 
@@ -218,7 +248,8 @@ def create_artifact(
     ensure_schema()
     artifact_id = str(uuid4())
 
-    with get_connection() as conn:
+    conn = get_connection()
+    try:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -240,6 +271,11 @@ def create_artifact(
             )
             row = cur.fetchone()
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
     return {
         "artifact_id": str(row["id"]),

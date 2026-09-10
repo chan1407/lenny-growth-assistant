@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 from typing import Any
 
-from providers import (
+from .providers import (
     GenerationResult,
     MissingCredentialsError,
     ProviderUnavailableError,
     build_provider,
 )
-from settings import settings
+from .settings import settings
 
 
 class UnsupportedProviderError(RuntimeError):
@@ -36,31 +36,23 @@ def _build_grounded_prompt(
     context: str,
     history: list[dict[str, Any]] | None,
 ) -> str:
-    return f"""
-You are The Lenny Growth Assistant.
+    history_text = _history_text(history)
+    return f"""Read the transcript and answer the question.
 
-Answer the user's product and growth question using ONLY the provided Lenny
-Podcast transcript context. Conversation history is included only to resolve
-references; it is not an additional factual source.
+{history_text}
 
-STRICT RULES:
-- Do not use outside knowledge or tools.
-- Do not invent facts, examples, companies, or recommendations.
-- Every important claim must be supported by the transcript context.
-- Mention the relevant guest/source when giving an insight.
-- If the context does not contain enough information, clearly say:
-  "The available Lenny transcripts don't provide enough information to answer this."
-- Give a concise, useful answer.
-
-{_history_text(history)}
-
-TRANSCRIPT CONTEXT:
+TRANSCRIPT:
 {context}
 
-USER QUESTION:
+QUESTION:
 {question}
-"""
 
+Find the answer directly in the transcript.
+Do not say the answer is missing if the transcript contains it.
+Do not use outside knowledge.
+
+ANSWER:
+"""
 
 def generate_answer(
     question: str,
@@ -68,6 +60,12 @@ def generate_answer(
     sources: list[dict[str, Any]],
     history: list[dict[str, Any]] | None = None,
 ) -> AgentResponse:
+    print("\n=== DEBUG QUESTION ===")
+    print(question)
+    print("\n=== DEBUG HISTORY ===")
+    print(history)
+    print("\n=== DEBUG CONTEXT ===")
+    print(context[:5000])
     prompt = _build_grounded_prompt(question, context, history)
     provider_name = settings.llm_provider
 
@@ -77,6 +75,9 @@ def generate_answer(
         raise UnsupportedProviderError(str(exc)) from exc
 
     try:
+        print("\n=== ACTUAL PROMPT SENT TO OLLAMA ===")
+        print(prompt)
+        print("=== END PROMPT ===\n")
         result: GenerationResult = provider.generate(prompt)
     except (ProviderUnavailableError, MissingCredentialsError):
         fallback_name = settings.llm_fallback_provider

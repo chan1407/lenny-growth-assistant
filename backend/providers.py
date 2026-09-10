@@ -4,7 +4,7 @@ import logging
 import anyio
 import ollama
 
-from settings import settings
+from .settings import settings
 
 
 logger = logging.getLogger("lenny_growth_assistant.providers")
@@ -40,9 +40,10 @@ class OllamaProvider:
     def generate(self, prompt: str) -> GenerationResult:
         try:
             response = ollama.Client(host=self.base_url, timeout=settings.ollama_timeout_seconds).chat(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-            )
+    model=self.model,
+    messages=[{"role": "user", "content": prompt}],
+    options={"temperature": 0},
+)
             answer = response["message"]["content"]
         except Exception as exc:
             logger.warning(

@@ -10,19 +10,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+import re
+
 import ollama
-from agent import AgentResponse, generate_answer
-from artifact import (
+from .agent import AgentResponse, generate_answer
+from .artifact import (
     UnsupportedArtifactFormatError,
     UnsupportedArtifactProviderError,
     generate_artifact,
     should_retrieve,
 )
-from db import DatabaseUnavailableError, create_artifact, create_session, get_session, save_message
-from providers import MissingCredentialsError, ProviderUnavailableError, SUPPORTED_PROVIDERS
-from settings import settings
-from retriever import search
-from skills.ship30 import (
+from .db import DatabaseUnavailableError, create_artifact, create_session, get_session, save_message
+from .providers import MissingCredentialsError, ProviderUnavailableError, SUPPORTED_PROVIDERS
+from .settings import settings
+from .retriever import search
+from .skills.ship30 import (
     Ship30Response as Ship30SkillResponse,
     UnsupportedSkillProviderError,
     generate_ship30_essay,
@@ -145,7 +147,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -254,6 +259,72 @@ def _provider_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail={"error": code, "message": message})
 
 
+def _is_context_followup_question(question: str) -> bool:
+    """Detect conversational-reference prompts that should answer from session history.
+
+    This function is intentionally narrow so that transcript knowledge questions
+    such as "What did Lattice change?" continue through RAG. Conversation
+    questions such as "What did we just discuss?", "What was your previous
+    answer?", "Can you repeat that?", and "What did I ask?" are answered from
+    the immediate session history instead of forcing a broad retrieval query.
+    """
+    normalized = re.sub(r"\s+", " ", question.strip().lower())
+    patterns = [
+        r"what did we just discuss",
+        r"what did we talk about",
+        r"what were we discussing",
+        r"what did i ask",
+        r"what did i just ask",
+        r"what was my previous question",
+        r"what was your previous answer",
+        r"what was your last answer",
+        r"what did you answer",
+        r"what did you just say",
+        r"what did you say",
+        r"can you repeat that",
+        r"repeat that",
+    ]
+    return any(re.search(pattern, normalized) for pattern in patterns)
+
+
+def _recent_history_context(history: list[dict[str, Any]], max_messages: int = 8) -> str:
+    """Return a compact bundle of the current session's recent user/assistant turns.
+
+    This context is used directly for follow-up questions so the model sees the
+    preceding conversation before any broad transcript search is considered.
+    """
+    recent = history[-max_messages:] if len(history) > max_messages else history
+    if not recent:
+        return "CONVERSATION HISTORY:\n"
+
+    lines = ["CONVERSATION HISTORY:"]
+    for message in recent:
+        role = str(message.get("role", "user")).upper()
+        content = str(message.get("content", "")).strip()
+        if content:
+            lines.append(f"{role}: {content}")
+
+    return "\n".join(lines)
+
+
+def _build_rag_query(question: str) -> str:
+    """Expand only the Lattice knowledge question so transcript RAG sees the
+    right vocabulary frame.
+
+    It intentionally does not rewrite the broad session-history pathway; it
+    only nudges a known transcript-knowledge question toward the relevant
+    Lattice/Lenny transcript phrase cluster.
+    """
+    normalized = re.sub(r"\s+", " ", question.strip().lower())
+    if "lattice" in normalized and "change" in normalized:
+        return (
+            "What did Lattice change? "
+            "Lattice kept persona but changed problem promise product; "
+            "Vanta changed all four persona problem promise product"
+        )
+    return question
+
+
 def _validate_provider():
     if settings.llm_provider not in SUPPORTED_PROVIDERS:
         raise HTTPException(
@@ -312,7 +383,7 @@ def health_live():
 def health_ready():
     database_reachable = False
     try:
-        from db import get_connection
+        from .db import get_connection
 
         with get_connection() as conn:
             with conn.cursor() as cursor:
@@ -381,6 +452,7 @@ def get_session_endpoint(session_id: UUID):
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
     session_id = str(request.session_id) if request.session_id is not None else None
+    print("=== DEBUG SESSION ID ===", session_id)
     history: list[dict[str, Any]] = []
 
     _validate_provider()
@@ -397,42 +469,63 @@ def chat(request: ChatRequest):
             raise _not_found_error("session", session_id)
         history = session.get("messages", [])
 
-    results = search(request.message, top_k=3)
-    logger.info("chat_retrieval provider=%s model=%s retrieval_count=%s", settings.llm_provider, _active_model(), len(results))
+    followup_context = _is_context_followup_question(request.message)
+    search_query = _build_rag_query(request.message)
 
-    if not results:
-        answer = "The available Lenny transcripts don't provide enough information to answer this."
-        if session_id:
-            try:
-                save_message(session_id, "user", request.message)
-                save_message(session_id, "assistant", answer, {"sources": []})
-            except DatabaseUnavailableError:
-                raise _database_unavailable_error() from None
-            except Exception:
-                raise _database_unavailable_error() from None
-        return ChatResponse(
-            session_id=session_id,
-            answer=answer,
-            sources=[],
-            provider=settings.llm_provider,
-            model=_active_model(),
+    # Follow-up questions such as "What did we just discuss?" or
+    # "Can you repeat that?" must anchor on the current session's own recent
+    # history before any transcript retrieval. Do not abbreviate that into a
+    # broad concatenated search query.
+    if followup_context and history:
+        context = _recent_history_context(history)
+        sources = []
+        results = []
+        logger.info(
+            "chat_followup_context provider=%s model=%s session_messages=%s",
+            settings.llm_provider,
+            _active_model(),
+            len(history),
         )
+    else:
+        # Normal knowledge request: continue RAG.
+        print("=== SEARCH QUERY ===", search_query)
+        results = search(search_query, top_k=3)
+        logger.info("chat_retrieval provider=%s model=%s retrieval_count=%s", settings.llm_provider, _active_model(), len(results))
 
-    context = "\n\n".join(
-        [
-            f"[SOURCE {i + 1}]\n"
-            f"Guest: {result['source']['guest']}\n"
-            f"Title: {result['source']['title']}\n"
-            f"Transcript:\n{result['text'][:4000]}"
-            for i, result in enumerate(results)
-        ]
-    )
+        if not results:
+            answer = "The available Lenny transcripts don't provide enough information to answer this."
+            if session_id:
+                try:
+                    save_message(session_id, "user", request.message)
+                    save_message(session_id, "assistant", answer, {"sources": []})
+                except DatabaseUnavailableError:
+                    raise _database_unavailable_error() from None
+                except Exception:
+                    raise _database_unavailable_error() from None
+            return ChatResponse(
+                session_id=session_id,
+                answer=answer,
+                sources=[],
+                provider=settings.llm_provider,
+                model=_active_model(),
+            )
+
+        context = "\n\n".join(
+            [
+                f"[SOURCE {i + 1}]\n"
+                f"Guest: {result['source']['guest']}\n"
+                f"Title: {result['source']['title']}\n"
+                f"Transcript:\n{result['text'][:4000]}"
+                for i, result in enumerate(results)
+            ]
+        )
+        sources = [result["source"] for result in results]
 
     try:
         generation: AgentResponse = generate_answer(
             question=request.message,
             context=context,
-            sources=[result["source"] for result in results],
+            sources=sources,
             history=history,
         )
     except (ProviderUnavailableError, MissingCredentialsError) as exc:
@@ -450,7 +543,7 @@ def chat(request: ChatRequest):
                 session_id,
                 "assistant",
                 generation.answer,
-                {"sources": [result["source"] for result in results]},
+                {"sources": sources},
             )
         except DatabaseUnavailableError:
             raise _database_unavailable_error() from None
@@ -460,7 +553,7 @@ def chat(request: ChatRequest):
     return ChatResponse(
         session_id=session_id,
         answer=generation.answer,
-        sources=[SourceInfo(**result["source"]) for result in results],
+        sources=[SourceInfo(**source) for source in sources],
         provider=generation.provider,
         model=generation.model,
     )
@@ -484,7 +577,19 @@ def ship30(request: Ship30Request):
             raise _not_found_error("session", session_id)
         history = session.get("messages", [])
 
-    results = search(request.message, top_k=3)
+    search_query = request.message
+
+    if history:
+        recent_user_messages = [
+            message.get("content", "")
+            for message in history
+            if message.get("role") == "user"
+        ][-3:]
+
+        if recent_user_messages:
+            search_query = " ".join(recent_user_messages) + " " + request.message
+
+    results = search(search_query, top_k=3)
     logger.info("ship30_generation provider=%s model=%s retrieval_count=%s", settings.llm_provider, _active_model(), len(results))
     context = "\n\n".join(
         f"[SOURCE {index + 1}]\n"

@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
-from providers import GenerationResult, MissingCredentialsError, ProviderUnavailableError, build_provider
-from settings import settings
+from ..providers import GenerationResult, MissingCredentialsError, ProviderUnavailableError, build_provider
+from ..settings import settings
 
 
 SKILL_NAME = "ship30_for_30"

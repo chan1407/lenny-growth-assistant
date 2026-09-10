@@ -26,11 +26,12 @@ body {
 .header h1 {
   margin: 0;
   font-size: 24px;
+  color: #243142;
 }
 
 .header p {
   margin: 6px 0 0;
-  color: #666;
+  color: #596272;
 }
 
 .model {
@@ -120,6 +121,79 @@ body {
   letter-spacing: 0.04em;
 }
 
+.message-sources {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.message-sources-title {
+  color: #8f3f2d;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.message-sources-list {
+  margin: 8px 0 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.message-source-card {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 10px 11px;
+  margin: 8px 0;
+  border: 1px solid #e9e6dd;
+  border-radius: 8px;
+  background: #fffaf8;
+}
+
+.message-source-title {
+  font-weight: 700;
+  color: #243142;
+  line-height: 1.4;
+}
+
+.message-source-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.message-source-guest {
+  color: #475467;
+  font-weight: 600;
+}
+
+.message-source-link {
+  color: #8f3f2d;
+  font-weight: 700;
+  font-size: 11px;
+  text-decoration: none;
+  border: 1px solid #8f3f2d;
+  border-radius: 5px;
+  padding: 2px 7px;
+  margin-left: 4px;
+  background: #fff;
+}
+
+.message-source-link:hover {
+  color: #8f3f2d;
+  text-decoration: underline;
+}
+
+.message-source-date {
+  display: inline-block;
+  color: #667085;
+  font-size: 11px;
+}
+
 .message.user .content {
   background: #222;
   color: white;
@@ -195,6 +269,7 @@ body {
 .artifact-header h2 {
   margin: 4px 0 0;
   font-size: 20px;
+  color: #243142;
 }
 
 .eyebrow,
@@ -215,7 +290,7 @@ body {
 
 .artifact-label {
   display: block;
-  color: #444;
+  color: #344154;
   font-size: 13px;
   font-weight: bold;
   margin-bottom: 8px;
@@ -223,12 +298,16 @@ body {
 
 .artifact-prompt {
   width: 100%;
-  min-height: 76px;
+  min-height: 90px;
+  height: 96px;
   padding: 10px;
   border: 1px solid #ccc;
   border-radius: 8px;
   resize: vertical;
+  color: #f4f6fa;
+  line-height: 1.45;
   font: inherit;
+  overflow: auto;
 }
 
 .artifact-controls {
@@ -249,6 +328,14 @@ body {
 
 .artifact-controls select {
   flex: 1;
+  color: #243142;
+  background-color: #ffffff;
+  font-weight: 600;
+}
+
+.artifact-controls option {
+  color: #243142;
+  background-color: #ffffff;
 }
 
 .artifact-controls button {

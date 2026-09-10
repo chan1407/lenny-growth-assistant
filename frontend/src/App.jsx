@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
 function renderMarkdown(markdown) {
@@ -20,6 +20,34 @@ function renderMarkdown(markdown) {
   });
 }
 
+function cleanSourceText(value) {
+  return String(value || "")
+    .replace(/\*\*/g, "")
+    .replace(/\[https?:\/\/[^\]]+\]\((https?:\/\/[^)]+)\)/g, "$1")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sourceKey(source) {
+  return [
+    cleanSourceText(source?.title),
+    cleanSourceText(source?.guest),
+    cleanSourceText(source?.youtube_url),
+    cleanSourceText(source?.publish_date),
+  ].join("||");
+}
+
+function uniqueSources(sources = []) {
+  const seen = new Set();
+  return sources.filter((source) => {
+    const key = sourceKey(source);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
@@ -32,6 +60,39 @@ function App() {
   const [artifactLoading, setArtifactLoading] = useState(false);
   const [artifactError, setArtifactError] = useState("");
 
+  const sessionIdRef = useRef(null);
+  const sessionPromiseRef = useRef(null);
+
+  const ensureSession = async () => {
+    if (sessionIdRef.current) {
+      return sessionIdRef.current;
+    }
+
+    if (!sessionPromiseRef.current) {
+      sessionPromiseRef.current = fetch("http://127.0.0.1:8000/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (!data.session_id) {
+            throw new Error("The backend did not return a session ID.");
+          }
+
+          sessionIdRef.current = data.session_id;
+          setSessionId(data.session_id);
+          return data.session_id;
+        })
+        .catch((error) => {
+          sessionPromiseRef.current = null;
+          throw error;
+        });
+    }
+
+    return sessionPromiseRef.current;
+  };
+
   useEffect(() => {
     fetch("http://127.0.0.1:8000/health")
       .then((response) => response.json())
@@ -40,16 +101,7 @@ function App() {
       })
       .catch(() => {});
 
-    fetch("http://127.0.0.1:8000/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.session_id) setSessionId(data.session_id);
-      })
-      .catch(() => {});
+    ensureSession().catch(() => {});
   }, []);
 
   const sendMessage = async () => {
@@ -62,6 +114,8 @@ function App() {
     setMessage("");
 
     try {
+      const currentSessionId = await ensureSession();
+
       const response = await fetch("http://127.0.0.1:8000/chat", {
         method: "POST",
         headers: {
@@ -69,7 +123,7 @@ function App() {
         },
         body: JSON.stringify({
           message: userMessage,
-          ...(sessionId ? { session_id: sessionId } : {}),
+          session_id: currentSessionId,
         }),
       });
 
@@ -85,7 +139,11 @@ function App() {
 
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: data.answer },
+        {
+          role: "assistant",
+          content: data.answer,
+          sources: Array.isArray(data.sources) ? data.sources : [],
+        },
       ]);
     } catch (error) {
       setMessages((prev) => [
@@ -106,12 +164,14 @@ function App() {
 
     setSkillLoading(true);
     try {
+      const currentSessionId = await ensureSession();
+
       const response = await fetch("http://127.0.0.1:8000/skills/ship30", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: currentQuestion,
-          ...(sessionId ? { session_id: sessionId } : {}),
+          session_id: currentSessionId,
         }),
       });
       const data = await response.json();
@@ -141,16 +201,18 @@ function App() {
   };
 
   const generateArtifact = async () => {
-    if (!sessionId || !artifactPrompt.trim() || artifactLoading) return;
+    if (!artifactPrompt.trim() || artifactLoading) return;
 
     setArtifactLoading(true);
     setArtifactError("");
     try {
+      const currentSessionId = await ensureSession();
+
       const response = await fetch("http://127.0.0.1:8000/artifacts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: sessionId,
+          session_id: currentSessionId,
           prompt: artifactPrompt.trim(),
           format: artifactFormat,
         }),
@@ -203,6 +265,52 @@ function App() {
                   ? renderMarkdown(msg.content)
                   : msg.content}
                 {msg.skill && <div className="skill-label">{msg.skill}</div>}
+                {msg.role === "assistant" && msg.sources?.length > 0 && (
+                  <div className="message-sources">
+                    <div className="message-sources-title">Sources</div>
+                    <ul className="message-sources-list">
+                      {uniqueSources(msg.sources).map((source, sourceIndex) => {
+                        const title = cleanSourceText(source.title);
+                        const guest = cleanSourceText(source.guest);
+                        const url = cleanSourceText(source.youtube_url);
+                        const date = cleanSourceText(source.publish_date);
+
+                        return (
+                          <li
+                            key={`${sourceIndex}-${sourceKey(source)}`}
+                            className="message-source-card"
+                          >
+                            <div className="message-source-title">
+                              {title || guest || "Transcript source"}
+                            </div>
+                            <div className="message-source-meta">
+                              {guest && (
+                                <span className="message-source-guest">
+                                  {guest}
+                                </span>
+                              )}
+                              {date && (
+                                <span className="message-source-date">
+                                  {date}
+                                </span>
+                              )}
+                              {url && (
+                                <a
+                                  className="message-source-link"
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  YouTube
+                                </a>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           ))}

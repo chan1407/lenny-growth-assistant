@@ -1,4 +1,4 @@
-from db import ensure_schema
+from .db import ensure_schema
 
 
 def main():

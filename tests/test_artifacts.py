@@ -85,6 +85,37 @@ def test_html_artifact_generation_requests_complete_safe_document(monkeypatch):
     assert result.provider == "anthropic"
 
 
+def test_html_artifact_generation_converts_markdown_to_self_contained_html(monkeypatch):
+    class FakeProvider:
+        def generate(self, prompt):
+            return providers.GenerationResult(
+                "Here is a short product brief based on the conversation:\n\n"
+                "**Product Brief:**\n\n"
+                "**Title:** Streamlined Communication\n\n"
+                "**Problem Statement:** We need to explain the problem clearly.",
+                "ollama",
+                "llama3.2:3b",
+            )
+
+    monkeypatch.setattr("artifact.build_provider", lambda name: FakeProvider())
+
+    result = generate_artifact(
+        "Create a short product brief from the current conversation.",
+        "html",
+        "Transcript context present for product brief generation.",
+        [{"guest": "Guest A", "title": "Episode A"}],
+    )
+
+    assert result.format == "html"
+    assert result.content.startswith("<!doctype html>")
+    assert "<html" in result.content.lower()
+    assert "<style" in result.content.lower()
+    assert "<body" in result.content.lower()
+    assert "**Product Brief:**" not in result.content
+    assert "**Title:**" not in result.content
+    assert "**Problem Statement:**" not in result.content
+
+
 def test_lenny_request_requires_grounded_context(monkeypatch):
     monkeypatch.setattr(
         "artifact.build_provider",

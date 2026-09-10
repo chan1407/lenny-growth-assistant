@@ -5,8 +5,9 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 
-CHUNKS_FILE = Path("../data/processed_chunks.json")
-EMBEDDINGS_FILE = Path("../data/embeddings.npy")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CHUNKS_FILE = REPO_ROOT / "data" / "processed_chunks.json"
+EMBEDDINGS_FILE = REPO_ROOT / "data" / "embeddings.npy"
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 

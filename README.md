@@ -117,10 +117,27 @@ or generation indefinitely.
 ## Provider Selection
 
 Ollama is the default local/demo provider and requires no cloud credential.
-Anthropic requires `ANTHROPIC_API_KEY` and the Claude Agent SDK. Fallback is
-disabled unless `LLM_FALLBACK_PROVIDER` is explicitly set. Provider/model
-metadata is visible in `/health` and generation responses; keys are never
-returned or logged.
+It is the default provider in the shipped configuration and remains the safe
+local demo path for fresh evaluators.
+
+Anthropic is an optional cloud provider. To use it, install the project
+requirements and configure an `ANTHROPIC_API_KEY` in the local environment
+file, then set `LLM_PROVIDER=anthropic`. The implementation uses the
+official `claude-agent-sdk` package from `backend/requirements.txt` and the
+`ClaudeAgentOptions`/`query()` code path in `backend/providers.py`.
+
+Fallback behavior is explicit and deterministic:
+
+- If `LLM_FALLBACK_PROVIDER` is empty or not different from the selected
+  provider, the route raises a structured provider error instead of silently
+  switching providers.
+- If `LLM_FALLBACK_PROVIDER` is set to a valid alternate provider name,
+  the route catches the provider failure and tries the fallback provider only
+  once. This match is visible in the route/failure logic in
+  `backend/provider.py` and `backend/agent.py`.
+
+Provider/model metadata is visible in `/health` and generation responses; keys
+are never returned or logged.
 
 ## Data and RAG
 

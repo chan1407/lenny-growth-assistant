@@ -2,6 +2,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -236,6 +237,126 @@ def test_artifact_database_failure_returns_503(monkeypatch):
 
     assert response.status_code == 503
     assert response.json()["error"] == "database_unavailable"
+
+
+def test_chat_followup_question_prioritizes_session_history_over_rag(monkeypatch):
+    session_id = "55555555-5555-4555-8555-555555555555"
+    existing_session = {
+        "session_id": session_id,
+        "user_metadata": {},
+        "created_at": datetime(2024, 1, 1),
+        "updated_at": datetime(2024, 1, 1),
+        "messages": [
+            {"role": "user", "content": "What are the four Ps of product-market fit?"},
+            {"role": "assistant", "content": "The four Ps are product, price, place, and promotion."},
+            {"role": "user", "content": "What did Lattice change?"},
+            {"role": "assistant", "content": "Lattice changed the pricing and rollout guidance around onboarding."},
+        ],
+    }
+
+    monkeypatch.setattr(main, "get_session", lambda sid: existing_session if sid == session_id else None)
+    monkeypatch.setattr(main, "save_message", lambda sid, role, content, source_metadata=None: {"ok": True})
+
+    generated_inputs = {}
+
+    def fake_generate(**kwargs):
+        generated_inputs["question"] = kwargs["question"]
+        generated_inputs["context"] = kwargs["context"]
+        generated_inputs["history"] = kwargs["history"]
+        generated_inputs["sources"] = kwargs["sources"]
+        return main.AgentResponse(
+            answer="We just discussed the four Ps and what Lattice changed.",
+            sources=[],
+            provider="ollama",
+            model="llama3.2:3b",
+        )
+
+    search_calls = []
+
+    def fake_search(query, top_k=3):
+        search_calls.append(query)
+        return [
+            {
+                "score": 0.99,
+                "text": "This is a completely unrelated transcript chunk about an internal product decision-making meeting.",
+                "source": {
+                    "guest": "Irrelevant Guest",
+                    "title": "Irrelevant Episode",
+                    "youtube_url": "https://example.com/irrelevant",
+                    "publish_date": "2024-01-01",
+                },
+            }
+        ]
+
+    monkeypatch.setattr(main, "search", fake_search)
+    monkeypatch.setattr(main, "generate_answer", fake_generate)
+
+    response = client.post("/chat", json={"message": "What did we just discuss?", "session_id": session_id})
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "We just discussed the four Ps and what Lattice changed."
+    assert search_calls == []
+    assert generated_inputs["question"] == "What did we just discuss?"
+    assert "The four Ps are product, price, place, and promotion." in generated_inputs["context"]
+    assert "Lattice changed the pricing and rollout guidance around onboarding." in generated_inputs["context"]
+    assert len(generated_inputs["history"]) == 4
+
+
+@pytest.mark.parametrize("question", ["What was your previous answer?", "Can you repeat that?"])
+def test_chat_followup_question_for_previous_answer_and_repeat_does_not_hit_broad_retrieval(monkeypatch, question):
+    session_id = "66666666-6666-4666-8666-666666666666"
+    existing_session = {
+        "session_id": session_id,
+        "user_metadata": {},
+        "created_at": datetime(2024, 1, 1),
+        "updated_at": datetime(2024, 1, 1),
+        "messages": [
+            {"role": "user", "content": "What are the four Ps of product-market fit?"},
+            {"role": "assistant", "content": "The four Ps are product, price, place, and promotion."},
+            {"role": "user", "content": "What did Lattice change?"},
+            {"role": "assistant", "content": "Lattice changed its pricing and rollout guidance."},
+        ],
+    }
+
+    monkeypatch.setattr(main, "get_session", lambda sid: existing_session if sid == session_id else None)
+    monkeypatch.setattr(main, "save_message", lambda sid, role, content, source_metadata=None: {"ok": True})
+
+    captured = {}
+
+    def fake_generate(**kwargs):
+        captured["context"] = kwargs["context"]
+        captured["history"] = kwargs["history"]
+        return main.AgentResponse(
+            answer="Repeated from history.",
+            sources=[],
+            provider="ollama",
+            model="llama3.2:3b",
+        )
+
+    def fake_search(query, top_k=3):
+        return [
+            {
+                "score": 0.99,
+                "text": "irrelevant transcript chunk",
+                "source": {
+                    "guest": "Irrelevant Guest",
+                    "title": "Irrelevant Episode",
+                    "youtube_url": "https://example.com/irrelevant",
+                    "publish_date": "2024-01-01",
+                },
+            }
+        ]
+
+    monkeypatch.setattr(main, "generate_answer", fake_generate)
+    monkeypatch.setattr(main, "search", fake_search)
+
+    response = client.post("/chat", json={"message": question, "session_id": session_id})
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Repeated from history."
+    assert "product, price, place, and promotion" in captured["context"].lower()
+    assert "lattice changed its pricing and rollout guidance" in captured["context"].lower()
+    assert "irrelevant transcript chunk" not in captured["context"]
 
 
 def test_unsupported_provider_returns_structured_error(monkeypatch):
