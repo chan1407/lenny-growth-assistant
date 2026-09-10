@@ -1,6 +1,16 @@
 .env
+.env.local
+.env.*
+!.env.example
 .venv/
+venv/
 __pycache__/
+*.py[cod]
+.pytest_cache/
 node_modules/
 dist/
 .git/
+.DS_Store
+*.log
+artifacts/
+cache/

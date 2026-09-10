@@ -57,25 +57,45 @@ For the simplest local path:
 Docker Compose can provide PostgreSQL, backend, and frontend. Ollama remains a
 host dependency by default, which is the reliable choice on Windows.
 
+## Assessment Deliverables / Documentation
+
+The repository keeps the required assessment documents in the docs folder and
+links them from this README so the demo and local setup stay GitHub-friendly.
+
+- [docs/design.md](docs/design.md)
+- [docs/architecture.md](docs/architecture.md)
+- [docs/manual-test-plan.md](docs/manual-test-plan.md)
+- [docs/artifact-generation.md](docs/artifact-generation.md)
+- [docs/provider-architecture.md](docs/provider-architecture.md)
+- [docs/deployment.md](docs/deployment.md)
+- [docs/agent-transcripts/](docs/agent-transcripts/)
+
+Demo video: [YouTube link to be added]
+
 ## Quick Start
 
+From repository root:
+
 ```powershell
-Copy-Item .env.example .env
-# Edit .env if your local PostgreSQL or provider settings differ
-Set-Location backend
-..\.venv\Scripts\python.exe -m pip install -r requirements.txt
-..\.venv\Scripts\python.exe -m uvicorn main:app --reload --port 8000
+cd C:\lenny-growth-assistant
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r backend\requirements.txt
+python -m uvicorn backend.main:app --reload --port 8000
 ```
 
 In another terminal:
 
 ```powershell
-Set-Location frontend
+cd C:\lenny-growth-assistant\frontend
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Frontend: <http://localhost:5173>
+
+The backend API starts on port 8000 with the module path `backend.main:app`.
+Ollama is the default local demo provider. Anthropic is optional and requires
+an `ANTHROPIC_API_KEY` and `LLM_PROVIDER=anthropic` configuration.
 
 ### Docker Compose
 
@@ -97,7 +117,8 @@ ollama pull llama3.2:3b
 ollama run llama3.2:3b
 ```
 
-Verify the service with `ollama list` and check `GET /health`. The API uses a
+Verify the service with `ollama list` and check `GET /health`. Ollama is the
+default local/demo provider, and Anthropic is optional. The API uses a
 bounded `OLLAMA_TIMEOUT_SECONDS` so an unavailable service does not hang health
 or generation indefinitely.
 
@@ -134,7 +155,7 @@ Fallback behavior is explicit and deterministic:
 - If `LLM_FALLBACK_PROVIDER` is set to a valid alternate provider name,
   the route catches the provider failure and tries the fallback provider only
   once. This match is visible in the route/failure logic in
-  `backend/provider.py` and `backend/agent.py`.
+  `backend/providers.py` and `backend/agent.py`.
 
 Provider/model metadata is visible in `/health` and generation responses; keys
 are never returned or logged.
@@ -180,16 +201,10 @@ also instructed to omit scripts, forms, event handlers, and external resources.
 
 ## Testing
 
-```powershell
-Set-Location f:\lenny-growth-assistant
-.\backend\.venv\Scripts\python.exe -m pytest -q
-Set-Location frontend
-npm run build
-```
-
-External-service tests mock Ollama, Anthropic, and database calls. Live Ollama
-and PostgreSQL checks are manual/integration checks, not required for the unit
-suite.
+Repository tests are stored in the `tests/` directory and exercise the
+backend API, provider selection, artifact generation, and the Ship 30 skill
+paths with provider/database mocks. Live Ollama and PostgreSQL checks are
+manual/integration checks, not required for the unit suite.
 
 ## Troubleshooting
 
