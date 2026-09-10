@@ -70,14 +70,14 @@ links them from this README so the demo and local setup stay GitHub-friendly.
 - [docs/deployment.md](docs/deployment.md)
 - [docs/agent-transcripts/](docs/agent-transcripts/)
 
-Demo video: [YouTube link to be added]
+Demo video: https://youtu.be/mZl-KPqHeoY
 
 ## Quick Start
 
 From repository root:
 
 ```powershell
-cd C:\lenny-growth-assistant
+cd lenny-growth-assistant
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r backend\requirements.txt
 python -m uvicorn backend.main:app --reload --port 8000
